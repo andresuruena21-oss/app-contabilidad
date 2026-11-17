@@ -1,5 +1,5 @@
 // Service worker de Mis Cuotas: funciona sin conexión y recibe los avisos push.
-const VERSION = 'mis-cuotas-v1';
+const VERSION = 'mis-cuotas-v2';
 const ARCHIVOS = [
   './', './index.html', './manifest.webmanifest', './css/estilos.css',
   './js/app.js', './js/config.js', './js/supabase.js', './js/calculos.js',
@@ -10,7 +10,12 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  // Se guarda archivo por archivo: si alguno falla, el service worker igual se instala.
+  e.waitUntil(
+    caches.open(VERSION)
+      .then((c) => Promise.allSettled(ARCHIVOS.map((a) => c.add(a))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {

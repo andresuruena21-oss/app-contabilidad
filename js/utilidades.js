@@ -14,7 +14,13 @@ export const instalada = () => matchMedia('(display-mode: standalone)').matches 
 
 /** true si el navegador permite notificaciones push. */
 export const pushSoportado = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
-
+export function swListo(ms = 4000) {
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((resolver) => setTimeout(() => resolver(null), ms)),
+  ]);
+}
 // ---------- Números ----------
 export const soloDigitos = (s) => String(s ?? '').replace(/\D/g, '');
 /** "1500000" → "1.500.000" (para los campos de dinero). */

@@ -3,14 +3,17 @@ import * as C from '../calculos.js';
 import { sb } from '../supabase.js';
 import { VAPID_PUBLIC_KEY } from '../config.js';
 import { estado, guardarCache, pendientesConDias } from '../estado.js';
-import { esc, esIOS, instalada, pushSoportado, b64aBytes, toast, refrescar, ICO_COMPARTIR } from '../utilidades.js';
+import { esc, esIOS, instalada, pushSoportado, swListo, b64aBytes, toast, refrescar, ICO_COMPARTIR } from '../utilidades.js';
 
 const DIAS_OPCIONES = [7, 5, 3, 2, 1, 0];
 const etiquetaDia = (d) => (d === 0 ? 'El mismo día' : d === 1 ? '1 día antes' : `${d} días antes`);
 
-async function estaSuscrito() {
-  if (!pushSoportado() || Notification.permission !== 'granted') return false;
-  try { return !!(await (await navigator.serviceWorker.ready).pushManager.getSubscription()); } catch { return false; }
+/** 'si' | 'no' | 'sin-sw' (el service worker no respondió) */
+async function estadoSuscripcion() {
+  if (!pushSoportado() || Notification.permission !== 'granted') return 'no';
+  const reg = await swListo();
+  if (!reg) return 'sin-sw';
+  try { return (await reg.pushManager.getSubscription()) ? 'si' : 'no'; } catch { return 'no'; }
 }
 
 async function bloqueNotificaciones() {
@@ -30,7 +33,12 @@ async function bloqueNotificaciones() {
     return `<div class="estado-push"><span class="punto no"></span>Notificaciones bloqueadas</div>
       <p class="sub" style="margin-top:8px">Actívalas en <b>Ajustes del iPhone › Notificaciones › Mis Cuotas</b> y vuelve a abrir la app.</p>`;
   }
-  if (await estaSuscrito()) {
+  const sus = await estadoSuscripcion();
+  if (sus === 'sin-sw') {
+    return `<div class="estado-push"><span class="punto no"></span>El servicio de avisos no cargó</div>
+      <p class="sub" style="margin-top:8px">Cierra la app por completo (desliza hacia arriba) y vuelve a abrirla. Si sigue igual, revisa tu conexión.</p>`;
+  }
+  if (sus === 'si') {
     return `<div class="estado-push"><span class="punto si"></span>Recordatorios activados en este dispositivo</div>
       <div class="dos">
         <button class="btn sec chico" data-accion="probar-push">Ver ejemplo</button>
@@ -88,7 +96,8 @@ async function activarPush() {
     const permiso = await Notification.requestPermission();
     if (permiso !== 'granted') { toast('No se dio permiso para notificaciones'); return refrescar(); }
 
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await swListo(8000);
+    if (!reg) throw new Error('el servicio de avisos no cargó. Cierra y vuelve a abrir la app.');
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(VAPID_PUBLIC_KEY) });
 
@@ -107,8 +116,8 @@ async function activarPush() {
 }
 
 async function desactivarPush() {
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
+  const reg = await swListo();
+  const sub = reg && await reg.pushManager.getSubscription();
   if (sub) {
     await sb.from('push_suscripciones').delete().eq('endpoint', sub.endpoint);
     await sub.unsubscribe();
@@ -119,7 +128,8 @@ async function desactivarPush() {
 
 /** Muestra una notificación de ejemplo desde el propio teléfono (no pasa por GitHub). */
 async function probarPush() {
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await swListo();
+  if (!reg) return toast('El servicio de avisos no cargó', { tipo: 'error' });
   const prox = pendientesConDias()[0];
   await reg.showNotification(prox ? `${C.textoRelativo(prox.dias)}: ${prox.compra.descripcion}` : 'Mis Cuotas', {
     body: prox ? `Cuota ${prox.numero} de ${prox.compra.num_cuotas} · ${C.pesos(prox.valor)}` : 'Así se verán tus recordatorios.',
