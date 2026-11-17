@@ -1,0 +1,13 @@
+{
+  "name": "mis-cuotas",
+  "private": true,
+  "type": "module",
+  "description": "PWA personal para llevar compras a cuotas con recordatorios push",
+  "scripts": {
+    "recordatorios": "node scripts/enviar-recordatorios.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "web-push": "^3.6.7"
+  }
+}
